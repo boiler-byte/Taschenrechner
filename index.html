@@ -235,29 +235,47 @@
 $(function () {
 
   // ---------- State ----------
-  let current = '0';        // aktuell angezeigter Wert
-  let expression = '';      // kompletter Ausdruck als String, z. B. "12+7*3"
+  // WICHTIG: current und expression sind IMMER roh (nur Ziffern + . + - * /).
+  // Formatierung (Tausenderpunkte, Komma) passiert ausschließlich in render().
+  let current = '0';        // roher Zahlenstring, z. B. "1234.5"
+  let expression = '';      // roher Ausdruck, z. B. "12+7*3"
   let justEvaluated = false;
   let errorState = false;
 
   const $screen  = $('#screen');
   const $preview = $('#preview');
 
-  // ---------- Helpers ----------
-  function formatNumber(n) {
-    if (!isFinite(n)) return 'Fehler';
-    // max ~12 signifikante Stellen, deutsches Format
+  // ---------- Formatierung (nur für Anzeige!) ----------
+  function formatNumber(rawStr) {
+    const n = parseFloat(rawStr);
+    if (isNaN(n) || !isFinite(n)) return rawStr;
+    // Rundung auf 10 Nachkommastellen gegen Float-Artefakte
     const rounded = Math.round((n + Number.EPSILON) * 1e10) / 1e10;
     return rounded.toLocaleString('de-DE', { maximumFractionDigits: 10 });
   }
 
+  // ---------- Rendering ----------
   function render() {
-    $screen.text(current === '' ? '0' : current);
-    $preview.text(expression ? expression.replace(/\*/g, ' × ').replace(/\//g, ' ÷ ') : '');
+    let display;
+    if (current === 'Fehler') {
+      display = 'Fehler';
+    } else if (current === '' ) {
+      display = '0';
+    } else {
+      display = formatNumber(current);
+    }
+    $screen.text(display);
+
+    $preview.text(
+      expression
+        ? expression.replace(/\*/g, ' × ').replace(/\//g, ' ÷ ')
+        : ''
+    );
   }
 
-  // Sichere Auswertung eines Ausdrucks (nur Ziffern und + - * / . erlaubt)
+  // ---------- Sichere Auswertung ----------
   function safeEval(expr) {
+    // Nur Ziffern, Operatoren, Punkt und Klammern erlaubt
     if (!/^[0-9+\-*/.() ]+$/.test(expr)) return NaN;
     try {
       // eslint-disable-next-line no-new-func
@@ -268,7 +286,7 @@ $(function () {
     }
   }
 
-  // ---------- Actions ----------
+  // ---------- Eingabe: Ziffer ----------
   function inputDigit(d) {
     if (errorState) resetAll();
 
@@ -286,6 +304,7 @@ $(function () {
     expression += d;
   }
 
+  // ---------- Eingabe: Dezimaltrennzeichen ----------
   function inputDot() {
     if (errorState) resetAll();
 
@@ -296,9 +315,10 @@ $(function () {
       return;
     }
 
-    // aktuellen Zahlenblock prüfen: letztes Stück nach Operator
+    // Prüfen, ob im aktuellen Zahlenblock schon ein Punkt ist
     const lastBlock = expression.split(/[+\-*/]/).pop();
-    if (lastBlock.includes('.') || lastBlock.includes(',')) return;
+    if (lastBlock.includes('.')) return;
+
     if (lastBlock === '' || current === '') {
       current = '0.';
       expression += '0.';
@@ -308,12 +328,13 @@ $(function () {
     }
   }
 
+  // ---------- Eingabe: Operator ----------
   function inputOperator(op) {
     if (errorState) resetAll();
 
     if (justEvaluated) {
-      // Ergebnis weiterverwenden
-      expression = current.replace(/\./g, '.') + op;
+      // Ergebnis weiterverwenden – current ist roh, also direkt nutzbar
+      expression = current + op;
       justEvaluated = false;
       current = '0';
       return;
@@ -330,11 +351,11 @@ $(function () {
       // Operator ersetzen
       expression = expression.slice(0, -1) + op;
     } else {
-      // Ausdruck auswerten und Zwischenergebnis anzeigen
+      // Zwischenergebnis berechnen und roh (!) einsetzen
       const val = safeEval(expression);
-      if (!isNaN(val)) {
-        current = formatNumber(val);
-        expression = val.toString() + op;
+      if (!isNaN(val) && isFinite(val)) {
+        current = val.toString();          // ROH
+        expression = val.toString() + op;  // ROH
       } else {
         expression += op;
       }
@@ -342,6 +363,7 @@ $(function () {
     current = '0';
   }
 
+  // ---------- Auswertung (=) ----------
   function evaluate() {
     if (errorState) return;
 
@@ -361,14 +383,15 @@ $(function () {
       return;
     }
 
-    const resultStr = result.toString();
+    const resultStr = result.toString();   // ROH
     addHistoryEntry(expr, resultStr);
 
-    current = formatNumber(result);
-    expression = resultStr;
+    current = resultStr;                   // ROH speichern
+    expression = resultStr;                // ROH speichern
     justEvaluated = true;
   }
 
+  // ---------- AC ----------
   function clearAll() {
     current = '0';
     expression = '';
@@ -379,10 +402,10 @@ $(function () {
     $('#historyEmpty').show();
   }
 
+  // ---------- Backspace ----------
   function backspace() {
     if (errorState) { resetAll(); return; }
     if (justEvaluated) {
-      // ganze Rechnung entfernen
       current = '0';
       expression = '';
       justEvaluated = false;
@@ -402,13 +425,14 @@ $(function () {
     }
   }
 
+  // ---------- Prozent ----------
   function percent() {
     if (errorState) return;
     const val = safeEval(expression || current);
-    if (isNaN(val)) return;
+    if (isNaN(val) || !isFinite(val)) return;
     const p = val / 100;
-    current = p.toString();
-    expression = p.toString();
+    current = p.toString();       // ROH
+    expression = p.toString();    // ROH
     justEvaluated = true;
   }
 
@@ -429,11 +453,7 @@ $(function () {
       .replace(/\+/g, ' + ')
       .replace(/-/g, ' − ');
 
-    const prettyRes = (() => {
-      const n = parseFloat(result);
-      if (isNaN(n)) return result;
-      return formatNumber(n);
-    })();
+    const prettyRes = formatNumber(result);
 
     const $line = $('<div class="history-line"></div>')
       .append($('<span class="expr"></span>').text(prettyExpr + ' ='))
@@ -441,7 +461,6 @@ $(function () {
 
     $('#historyList').append($line);
 
-    // automatisch nach unten scrollen
     const panel = document.getElementById('historyPanelInner');
     if (panel) panel.scrollTop = panel.scrollHeight;
   }
