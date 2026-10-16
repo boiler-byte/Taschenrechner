@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taschenrechner</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12141a;
+    --panel: #1b1e26;
+    --panel-2: #232733;
+    --accent: #c9a86a;
+    --accent-soft: #8a7442;
+    --text: #e8e6e1;
+    --muted: #8b8f9a;
+    --danger: #b5544a;
+  }
+
+  body {
+    background: radial-gradient(circle at 50% 0%, #1a1d26 0%, var(--bg) 70%);
+    min-height: 100vh;
+    color: var(--text);
+    font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 12px;
+  }
+
+  .calc-card {
+    background: var(--panel);
+    border: 1px solid #2c3040;
+    border-radius: 20px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.03);
+    width: 100%;
+    max-width: 420px;
+    overflow: hidden;
+  }
+
+  .calc-display {
+    background: var(--panel-2);
+    padding: 22px 24px 18px;
+    text-align: right;
+    border-bottom: 1px solid #2c3040;
+  }
+
+  .calc-history-preview {
+    font-size: 0.85rem;
+    color: var(--muted);
+    min-height: 1.2em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+  }
+
+  .calc-screen {
+    font-size: 2.4rem;
+    font-weight: 300;
+    color: var(--text);
+    overflow-x: auto;
+    white-space: nowrap;
+    letter-spacing: 1px;
+    scrollbar-width: none;
+  }
+  .calc-screen::-webkit-scrollbar { display: none; }
+
+  .btn-key {
+    background: var(--panel-2);
+    border: 1px solid #2c3040;
+    color: var(--text);
+    font-size: 1.15rem;
+    font-weight: 400;
+    padding: 16px 0;
+    border-radius: 12px;
+    transition: background 0.15s, transform 0.05s, border-color 0.15s;
+    user-select: none;
+  }
+
+  .btn-key:hover {
+    background: #2b3040;
+    border-color: #3a4055;
+  }
+  .btn-key:active {
+    transform: scale(0.97);
+  }
+
+  .btn-op {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .btn-equals {
+    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-soft) 100%);
+    color: #1a1d26;
+    font-weight: 600;
+    border: none;
+  }
+  .btn-equals:hover {
+    background: linear-gradient(180deg, #d8b877 0%, #9a8449 100%);
+  }
+
+  .btn-clear {
+    color: var(--danger);
+    font-weight: 500;
+  }
+
+  .btn-fn {
+    color: var(--muted);
+  }
+
+  .history-toggle {
+    background: transparent;
+    border: 1px solid #2c3040;
+    color: var(--muted);
+    font-size: 0.8rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border-radius: 8px;
+    transition: all 0.15s;
+  }
+  .history-toggle:hover {
+    color: var(--accent);
+    border-color: var(--accent-soft);
+  }
+  .history-toggle[aria-expanded="true"] {
+    color: var(--accent);
+    border-color: var(--accent-soft);
+  }
+
+  .history-panel {
+    background: #14171f;
+    border-top: 1px solid #2c3040;
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 14px 20px;
+    font-size: 0.9rem;
+    scrollbar-width: thin;
+    scrollbar-color: #333a4d transparent;
+  }
+  .history-panel::-webkit-scrollbar { width: 8px; }
+  .history-panel::-webkit-scrollbar-track { background: transparent; }
+  .history-panel::-webkit-scrollbar-thumb {
+    background: #333a4d;
+    border-radius: 4px;
+  }
+  .history-panel::-webkit-scrollbar-thumb:hover { background: #454d66; }
+
+  .history-line {
+    padding: 7px 0;
+    border-bottom: 1px dashed #232733;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .history-line:last-child { border-bottom: none; }
+  .history-line .expr { color: var(--muted); word-break: break-all; }
+  .history-line .res { color: var(--accent); font-weight: 500; white-space: nowrap; }
+
+  .history-empty {
+    color: #4c5261;
+    font-style: italic;
+    text-align: center;
+    padding: 12px 0;
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="calc-card">
+
+  <!-- Display -->
+  <div class="calc-display">
+    <div class="calc-history-preview" id="preview"></div>
+    <div class="calc-screen" id="screen">0</div>
+  </div>
+
+  <!-- Tasten -->
+  <div class="p-3">
+    <div class="row g-2 mb-2">
+      <div class="col-3"><button class="btn btn-key btn-clear w-100" data-action="clear">AC</button></div>
+      <div class="col-3"><button class="btn btn-key btn-fn w-100" data-action="back">⌫</button></div>
+      <div class="col-3"><button class="btn btn-key btn-fn w-100" data-action="percent">%</button></div>
+      <div class="col-3"><button class="btn btn-key btn-op w-100" data-op="/">÷</button></div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-3"><button class="btn btn-key w-100" data-num="7">7</button></div>
+      <div class="col-3"><button class="btn btn-key w-100" data-num="8">8</button></div>
+      <div class="col-3"><button class="btn btn-key w-100" data-num="9">9</button></div>
+      <div class="col-3"><button class="btn btn-key btn-op w-100" data-op="*">×</button></div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-3"><button class="btn btn-key w-100" data-num="4">4</button></div>
+      <div class="col-3"><button class="btn btn-key w-100" data-num="5">5</button></div>
+      <div class="col-3"><button class="btn btn-key w-100" data-num="6">6</button></div>
+      <div class="col-3"><button class="btn btn-key btn-op w-100" data-op="-">−</button></div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-3"><button class="btn btn-key w-100" data-num="1">1</button></div>
+      <div class="col-3"><button class="btn btn-key w-100" data-num="2">2</button></div>
+      <div class="col-3"><button class="btn btn-key w-100" data-num="3">3</button></div>
+      <div class="col-3"><button class="btn btn-key btn-op w-100" data-op="+">+</button></div>
+    </div>
+    <div class="row g-2">
+      <div class="col-3"><button class="btn btn-key w-100" data-num="0">0</button></div>
+      <div class="col-3"><button class="btn btn-key w-100" data-action="dot">,</button></div>
+      <div class="col-6"><button class="btn btn-key btn-equals w-100" data-action="equals">=</button></div>
+    </div>
+
+    <!-- Rechenweg Toggle -->
+    <div class="mt-3 text-center">
+      <button class="history-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#historyPanel" aria-expanded="false">
+        Rechenweg
+      </button>
+    </div>
+  </div>
+
+  <!-- Rechenweg -->
+  <div class="collapse" id="historyPanel">
+    <div class="history-panel" id="historyPanelInner">
+      <div class="history-empty" id="historyEmpty">Noch keine Berechnungen</div>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://code.jquery.com/jquery-4.0.0-beta.2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+$(function () {
+
+  // ---------- State ----------
+  let current = '0';        // aktuell angezeigter Wert
+  let expression = '';      // kompletter Ausdruck als String, z. B. "12+7*3"
+  let justEvaluated = false;
+  let errorState = false;
+
+  const $screen  = $('#screen');
+  const $preview = $('#preview');
+
+  // ---------- Helpers ----------
+  function formatNumber(n) {
+    if (!isFinite(n)) return 'Fehler';
+    // max ~12 signifikante Stellen, deutsches Format
+    const rounded = Math.round((n + Number.EPSILON) * 1e10) / 1e10;
+    return rounded.toLocaleString('de-DE', { maximumFractionDigits: 10 });
+  }
+
+  function render() {
+    $screen.text(current === '' ? '0' : current);
+    $preview.text(expression ? expression.replace(/\*/g, ' × ').replace(/\//g, ' ÷ ') : '');
+  }
+
+  // Sichere Auswertung eines Ausdrucks (nur Ziffern und + - * / . erlaubt)
+  function safeEval(expr) {
+    if (!/^[0-9+\-*/.() ]+$/.test(expr)) return NaN;
+    try {
+      // eslint-disable-next-line no-new-func
+      const val = Function('"use strict";return (' + expr + ')')();
+      return typeof val === 'number' ? val : NaN;
+    } catch (e) {
+      return NaN;
+    }
+  }
+
+  // ---------- Actions ----------
+  function inputDigit(d) {
+    if (errorState) resetAll();
+
+    if (justEvaluated) {
+      // Nach "=" startet neue Rechnung mit der Ziffer
+      current = d;
+      expression = d;
+      justEvaluated = false;
+      return;
+    }
+
+    if (current === '0') current = d;
+    else current += d;
+
+    expression += d;
+  }
+
+  function inputDot() {
+    if (errorState) resetAll();
+
+    if (justEvaluated) {
+      current = '0.';
+      expression = '0.';
+      justEvaluated = false;
+      return;
+    }
+
+    // aktuellen Zahlenblock prüfen: letztes Stück nach Operator
+    const lastBlock = expression.split(/[+\-*/]/).pop();
+    if (lastBlock.includes('.') || lastBlock.includes(',')) return;
+    if (lastBlock === '' || current === '') {
+      current = '0.';
+      expression += '0.';
+    } else {
+      current += '.';
+      expression += '.';
+    }
+  }
+
+  function inputOperator(op) {
+    if (errorState) resetAll();
+
+    if (justEvaluated) {
+      // Ergebnis weiterverwenden
+      expression = current.replace(/\./g, '.') + op;
+      justEvaluated = false;
+      current = '0';
+      return;
+    }
+
+    if (expression === '') {
+      expression = current + op;
+      current = '0';
+      return;
+    }
+
+    const lastChar = expression.slice(-1);
+    if ('+-*/'.includes(lastChar)) {
+      // Operator ersetzen
+      expression = expression.slice(0, -1) + op;
+    } else {
+      // Ausdruck auswerten und Zwischenergebnis anzeigen
+      const val = safeEval(expression);
+      if (!isNaN(val)) {
+        current = formatNumber(val);
+        expression = val.toString() + op;
+      } else {
+        expression += op;
+      }
+    }
+    current = '0';
+  }
+
+  function evaluate() {
+    if (errorState) return;
+
+    let expr = expression;
+    if (!expr) return;
+
+    // Endet mit Operator → diesen entfernen
+    if ('+-*/'.includes(expr.slice(-1))) {
+      expr = expr.slice(0, -1);
+    }
+
+    const result = safeEval(expr);
+    if (isNaN(result) || !isFinite(result)) {
+      current = 'Fehler';
+      errorState = true;
+      expression = '';
+      return;
+    }
+
+    const resultStr = result.toString();
+    addHistoryEntry(expr, resultStr);
+
+    current = formatNumber(result);
+    expression = resultStr;
+    justEvaluated = true;
+  }
+
+  function clearAll() {
+    current = '0';
+    expression = '';
+    justEvaluated = false;
+    errorState = false;
+    // Rechenweg zurücksetzen
+    $('#historyList').empty();
+    $('#historyEmpty').show();
+  }
+
+  function backspace() {
+    if (errorState) { resetAll(); return; }
+    if (justEvaluated) {
+      // ganze Rechnung entfernen
+      current = '0';
+      expression = '';
+      justEvaluated = false;
+      return;
+    }
+    if (expression.length === 0) return;
+
+    expression = expression.slice(0, -1);
+
+    // current aus dem letzten Zahlenblock neu ableiten
+    const parts = expression.split(/([+\-*/])/);
+    const last = parts[parts.length - 1];
+    if (last === '' || /[+\-*/]/.test(last)) {
+      current = '0';
+    } else {
+      current = last;
+    }
+  }
+
+  function percent() {
+    if (errorState) return;
+    const val = safeEval(expression || current);
+    if (isNaN(val)) return;
+    const p = val / 100;
+    current = p.toString();
+    expression = p.toString();
+    justEvaluated = true;
+  }
+
+  function resetAll() {
+    current = '0';
+    expression = '';
+    justEvaluated = false;
+    errorState = false;
+  }
+
+  // ---------- Rechenweg ----------
+  function addHistoryEntry(expr, result) {
+    $('#historyEmpty').hide();
+
+    const prettyExpr = expr
+      .replace(/\*/g, ' × ')
+      .replace(/\//g, ' ÷ ')
+      .replace(/\+/g, ' + ')
+      .replace(/-/g, ' − ');
+
+    const prettyRes = (() => {
+      const n = parseFloat(result);
+      if (isNaN(n)) return result;
+      return formatNumber(n);
+    })();
+
+    const $line = $('<div class="history-line"></div>')
+      .append($('<span class="expr"></span>').text(prettyExpr + ' ='))
+      .append($('<span class="res"></span>').text(prettyRes));
+
+    $('#historyList').append($line);
+
+    // automatisch nach unten scrollen
+    const panel = document.getElementById('historyPanelInner');
+    if (panel) panel.scrollTop = panel.scrollHeight;
+  }
+
+  // ---------- Events ----------
+  $(document).on('click', '[data-num]', function () {
+    inputDigit($(this).data('num').toString());
+    render();
+  });
+
+  $(document).on('click', '[data-op]', function () {
+    inputOperator($(this).data('op'));
+    render();
+  });
+
+  $(document).on('click', '[data-action]', function () {
+    const action = $(this).data('action');
+    if (action === 'clear')   clearAll();
+    if (action === 'back')    backspace();
+    if (action === 'dot')     inputDot();
+    if (action === 'equals')  evaluate();
+    if (action === 'percent') percent();
+    render();
+  });
+
+  // Tastatur
+  $(document).on('keydown', function (e) {
+    const k = e.key;
+    if (/^[0-9]$/.test(k)) { inputDigit(k); render(); e.preventDefault(); return; }
+    if (k === '.' || k === ',') { inputDot(); render(); e.preventDefault(); return; }
+    if (k === '+' || k === '-' || k === '*' || k === '/') {
+      inputOperator(k); render(); e.preventDefault(); return;
+    }
+    if (k === 'Enter' || k === '=') { evaluate(); render(); e.preventDefault(); return; }
+    if (k === 'Backspace') { backspace(); render(); e.preventDefault(); return; }
+    if (k === 'Escape') { clearAll(); render(); e.preventDefault(); return; }
+    if (k === '%') { percent(); render(); e.preventDefault(); return; }
+  });
+
+  // Initial
+  render();
+});
+</script>
+</body>
+</html>
